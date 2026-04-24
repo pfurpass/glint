@@ -172,4 +172,4 @@ Requires Node 18+ and a browser with WebGPU or WebGL2 (Chrome, Firefox, Safari a
 
 ## License
 
-MIT.
+Apache

@@ -69,7 +69,16 @@ export type Stmt =
   | { kind: "var"; name: string; type?: TypeRef; value: Expr; line: number }
   | { kind: "return"; value?: Expr; line: number }
   | { kind: "assign"; target: Expr; value: Expr; line: number }
-  | { kind: "expr"; value: Expr; line: number };
+  | { kind: "expr"; value: Expr; line: number }
+  | { kind: "if"; cond: Expr; then: Stmt[]; else?: Stmt[]; line: number }
+  | {
+      kind: "for";
+      init: Stmt;
+      cond: Expr;
+      update: Stmt;
+      body: Stmt[];
+      line: number;
+    };
 
 export interface Module {
   structs: StructDecl[];

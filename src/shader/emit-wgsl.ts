@@ -55,20 +55,35 @@ function isUninit(e: { kind: string; name?: string }): boolean {
   return e.kind === "ident" && e.name === "__uninit";
 }
 
-function emitStmt(s: Stmt): string {
+function emitStmt(s: Stmt, indent = "  "): string {
   switch (s.kind) {
     case "let":
     case "var":
       if (isUninit(s.value)) {
-        return `  ${s.kind} ${s.name}${s.type ? `: ${typeStr(s.type)}` : ""};`;
+        return `${indent}${s.kind} ${s.name}${s.type ? `: ${typeStr(s.type)}` : ""};`;
       }
-      return `  ${s.kind} ${s.name}${s.type ? `: ${typeStr(s.type)}` : ""} = ${emitExpr(s.value)};`;
+      return `${indent}${s.kind} ${s.name}${s.type ? `: ${typeStr(s.type)}` : ""} = ${emitExpr(s.value)};`;
     case "return":
-      return s.value ? `  return ${emitExpr(s.value)};` : "  return;";
+      return s.value ? `${indent}return ${emitExpr(s.value)};` : `${indent}return;`;
     case "assign":
-      return `  ${emitExpr(s.target)} = ${emitExpr(s.value)};`;
+      return `${indent}${emitExpr(s.target)} = ${emitExpr(s.value)};`;
     case "expr":
-      return `  ${emitExpr(s.value)};`;
+      return `${indent}${emitExpr(s.value)};`;
+    case "if": {
+      const thenBody = s.then.map((st) => emitStmt(st, indent + "  ")).join("\n");
+      let out = `${indent}if (${emitExpr(s.cond)}) {\n${thenBody}\n${indent}}`;
+      if (s.else) {
+        const elseBody = s.else.map((st) => emitStmt(st, indent + "  ")).join("\n");
+        out += ` else {\n${elseBody}\n${indent}}`;
+      }
+      return out;
+    }
+    case "for": {
+      const init = emitStmt(s.init, "").trim().replace(/;$/, "");
+      const update = emitStmt(s.update, "").trim().replace(/;$/, "");
+      const body = s.body.map((st) => emitStmt(st, indent + "  ")).join("\n");
+      return `${indent}for (${init}; ${emitExpr(s.cond)}; ${update}) {\n${body}\n${indent}}`;
+    }
   }
 }
 
@@ -83,7 +98,7 @@ function emitFn(f: FnDecl): string {
       attrs.push(`@location(${f.returnAttr.location})`);
     ret = ` -> ${attrs.join(" ")} ${typeStr(f.returnType)}`.replace(/  +/g, " ");
   }
-  const body = f.body.map(emitStmt).join("\n");
+  const body = f.body.map((s) => emitStmt(s)).join("\n");
   return `${stage}fn ${f.name}(${params})${ret} {\n${body}\n}`;
 }
 

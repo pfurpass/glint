@@ -161,6 +161,11 @@ class GLCommandEncoder implements ICommandEncoder {
     if (target) {
       gl.bindFramebuffer(gl.FRAMEBUFFER, target.framebuffer);
       gl.viewport(0, 0, target.width, target.height);
+    } else if (this.backend.externalFramebuffer) {
+      gl.bindFramebuffer(gl.FRAMEBUFFER, this.backend.externalFramebuffer);
+      const vp = this.backend.externalViewport;
+      if (vp) gl.viewport(vp.x, vp.y, vp.width, vp.height);
+      else gl.viewport(0, 0, this.backend.canvas.width, this.backend.canvas.height);
     } else {
       gl.bindFramebuffer(gl.FRAMEBUFFER, null);
       gl.viewport(0, 0, this.backend.canvas.width, this.backend.canvas.height);
@@ -379,6 +384,9 @@ export class WebGL2Backend implements IBackend {
   readonly kind = "webgl2" as const;
   stats = { drawCalls: 0, triangles: 0, pipelines: 0, buffers: 0, textures: 0, bytes: 0 };
   debug: IBackend["debug"] = { isolateDraw: null, logCalls: false };
+  /** When set, overrides the default framebuffer + viewport (used by XR stereo rendering). */
+  externalFramebuffer: WebGLFramebuffer | null = null;
+  externalViewport: { x: number; y: number; width: number; height: number } | null = null;
 
   constructor(readonly canvas: HTMLCanvasElement, readonly gl: WebGL2RenderingContext) {}
 

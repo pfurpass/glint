@@ -12,8 +12,8 @@ export class Scene3D {
     this.light = light;
   }
 
-  collect(camera: Camera3D): RenderableItem[] {
-    camera.update();
+  collect(camera: Camera3D, opts: { skipCameraUpdate?: boolean } = {}): RenderableItem[] {
+    if (!opts.skipCameraUpdate) camera.update();
     this.root.updateWorld();
     const out: RenderableItem[] = [];
     const walk = (n: Node) => {

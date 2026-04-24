@@ -51,6 +51,13 @@ Import only what you need:
 | `glint/2d`        | `ShapeBatch`, `SpriteBatch`, `VertexBatch` + all of core         |
 | `glint/3d`        | `Camera3D`, `Node`, `Scene3D`, `StandardMaterial`, `DirectionalLight`, `boxGeometry`, `sphereGeometry`, `planeGeometry`, mat4 math |
 | `glint/viz`       | `Chart` (scatter / line / bars / axes), `linearScale`, `niceTicks` |
+| `glint/anim`      | `Timeline`, easing functions (tween any numeric field)            |
+| `glint/post`      | `PostChain`, `PostEffect`, built-ins: `grayscale`, `vignette`, `scanlines`, `blur`, `bloom`, `chromaticAberration`, `filmGrain`, `pixelate`, `invert`, `toneMap`, `edgeDetect`, `colorGrade` |
+| `glint/xr`        | `enterXR`, `enterXRScene` — WebXR session + stereo Scene3D rendering |
+| `glint/gltf`      | `loadGltf` — reads `.glb`/`.gltf`, **including skeletal animation** (joints + inverse bind matrices + keyframe animations, quaternion TRS) |
+| `glint/physics`   | `PhysicsWorld` — impulse-based 2D physics with circle/AABB colliders, gravity, restitution, friction |
+| `glint/audio`     | `AudioEngine` — Web Audio wrapper with 3D positional sound, procedural tones, master bus |
+| `glint/editor`    | `createSceneEditor` — in-browser panel that lists Scene3D nodes + sliders for position/rotation/scale + color picker |
 | `glint/shader`    | `compileShader`, `parseShader`, WGSL/GLSL emitters               |
 | `glint/backend`   | `IBackend`, `WebGPUBackend`, `WebGL2Backend`, `pickBackend`      |
 
@@ -73,6 +80,9 @@ With `npm install` and `npm run dev`:
 | `/scene3d.html`    | Box + 8 spheres + ground plane with Lambert lighting               |
 | `/dataviz.html`    | 3-panel chart: 50k scatter, line, bars                             |
 | `/instanced.html`  | 10,000 animated quads in a single draw call                        |
+| `/post.html`       | 3D scene through a post-processing chain (grayscale + vignette + scanlines), timeline-animated |
+| `/physics.html`    | 80+ balls with gravity, collision, sound-on-impact; click to spawn more |
+| `/editor.html`     | 3D scene with the in-browser node editor panel (pick a node, drag sliders) |
 
 Every example runs on both backends. To force a backend for testing:
 
@@ -103,9 +113,9 @@ struct VSOut { @builtin(position) pos: vec4f, @location(0) color: vec3f };
 }
 ```
 
-Supported today: scalars (`f32`/`i32`/`u32`/`bool`), vectors (`vec2f`/`vec3f`/`vec4f`), matrices (`mat3x3f`/`mat4x4f`), textures (`texture_2d<f32>`), samplers, `@vertex`/`@fragment`/`@location`/`@builtin(position)`, arithmetic ops, struct I/O, `textureSample`.
+Supported today: scalars (`f32`/`i32`/`u32`/`bool`), vectors (`vec2f`/`vec3f`/`vec4f`), matrices (`mat3x3f`/`mat4x4f`), textures (`texture_2d<f32>`), samplers, `@vertex`/`@fragment`/`@location`/`@builtin(position)`, arithmetic + comparison + logical ops, `if`/`else`/`for`, compound assignments (`+=` etc.), struct I/O, **struct-typed uniforms** (flattened into per-field bindings automatically), `textureSample`.
 
-Not yet: control flow (`if`/`for`), struct-typed uniforms (declare each member separately), storage buffers, compute shaders.
+Not yet: storage buffers, compute shaders.
 
 ## Debug
 
@@ -137,8 +147,14 @@ bundle sizes (esbuild --minify, single-file tree-shaken):
   -------------   --------  --------
   glint/core      45.1 KB   13.8 KB
   glint/2d        48.9 KB   15.0 KB
-  glint/3d        51.9 KB   16.3 KB
+  glint/3d        54.9 KB   17.4 KB
   glint/viz       48.5 KB   15.2 KB
+  glint/anim       1.7 KB     884 B
+  glint/post      47.7 KB   14.2 KB
+  glint/xr        14.1 KB    5.2 KB
+  glint/physics    2.3 KB     888 B
+  glint/audio      2.1 KB     844 B
+  glint/editor     4.2 KB     1.5 KB
   glint/shader    15.3 KB   4.8 KB
   glint/backend   22.6 KB   6.9 KB
   glint (all)     45.2 KB   13.9 KB
@@ -146,17 +162,21 @@ bundle sizes (esbuild --minify, single-file tree-shaken):
 
 The 2D core ships at 15 KB gzipped — well under the 50 KB budget — with no 3D matrix code included.
 
-## Non-goals
+## Scope
 
-Deliberately out of scope, and will stay that way:
+All modules are opt-in, separately importable, tree-shakable:
 
-- **Physics, audio, networking** — use libraries that specialize in those. Glint is a renderer.
-- **Timeline animation system** — your app controls the loop; glint draws what you tell it per frame.
-- **glTF loader with skeletal animation** — simple glTF is fine to add later; skinning is not.
-- **VR/AR (WebXR)** — separate concern.
-- **Post-processing pipeline with many effects** — `RenderTarget` is provided as a primitive, but a full effect-graph system is out of scope.
-- **Visual scene editor**.
-- **Compute shaders** — WebGL2 has no compute-shader stage. Adding WebGPU-only compute would violate the "one API, same results on both backends" contract. Not provided.
+- **glTF loader with skinning** — `glint/gltf` / `glint/3d`. Reads `.glb` and `.gltf`, extracts positions/normals/UVs/indices, `baseColorFactor`, skins (joints + inverse bind matrices), and animations. Includes `SkinnedMaterial`, `Skeleton`, `AnimationPlayer` with quaternion slerp and keyframe sampling.
+- **Timeline / tweens** — `glint/anim`. 884 bytes gzipped. Tweens any numeric property or `number[]` slot with easing, repeat, yoyo, delay.
+- **Post-processing (12 built-in effects)** — `glint/post`. Ping-pong `PostChain` with `grayscale`, `vignette`, `scanlines`, `blur`, `bloom`, `chromaticAberration`, `filmGrain`, `pixelate`, `invert`, `toneMap`, `edgeDetect`, `colorGrade`. Write your own by passing a fragment body to `PostEffect`.
+- **WebXR** — `glint/xr`. `enterXR()` for a raw per-eye callback, `enterXRScene()` to drive a Scene3D directly in stereo. WebGL2 backend (WebXR↔WebGPU binding is still rolling out).
+- **2D physics** — `glint/physics`. Impulse-based `PhysicsWorld` with circle/AABB colliders, gravity, restitution, friction, collision callbacks. 888 bytes gzipped.
+- **Audio** — `glint/audio`. Web Audio wrapper with 3D positional `PannerNode`-based playback, procedural tone generator, master-gain mixer. 844 bytes gzipped.
+- **Visual editor** — `glint/editor`. In-browser panel that reads a `Scene3D`, lists nodes, and exposes sliders for position/rotation/scale + a color picker for base colour. 1.5 KB gzipped.
+
+### Explicit non-goal
+
+- **Compute shaders** — WebGL2 has no compute-shader stage. A WebGPU-only compute path would break the "same API, same results on both backends" contract. Not provided.
 
 ## Install & develop
 
@@ -164,6 +184,7 @@ Deliberately out of scope, and will stay that way:
 npm install
 npm run dev       # Vite dev server with all examples
 npm run typecheck # tsc --noEmit
+npm run test      # unit tests (node --test + tsx)
 npm run build     # emit dist/ for publishing
 npm run size      # measure per-entry-point gzip size
 ```

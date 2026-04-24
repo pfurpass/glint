@@ -11,6 +11,16 @@ export { StandardMaterial, type StandardMaterialOptions } from "./material.js";
 export { DirectionalLight } from "./lights.js";
 export { Node } from "./node.js";
 export { Scene3D } from "./scene.js";
+export { loadGltf, type GltfLoadResult } from "./gltf.js";
+export {
+  SkinnedMaterial,
+  Skeleton,
+  AnimationClip,
+  AnimationPlayer,
+  SKINNED_LAYOUT,
+  type AnimationChannel,
+  type AnimationPath,
+} from "./skinning.js";
 export {
   mat4Identity,
   mat4Perspective,

@@ -250,6 +250,31 @@ class Parser {
 
   private parseStmt(): Stmt {
     const t = this.peek();
+    if (t.kind === "keyword" && t.value === "if") {
+      const kw = this.eat();
+      // WGSL: `if cond { ... }` — parens optional. Accept both.
+      const hadParen = this.match("punct", "(");
+      const cond = this.parseExpr();
+      if (hadParen) this.expect("punct", ")");
+      const thenBody = this.parseBlock();
+      let elseBody: Stmt[] | undefined;
+      if (this.peek().kind === "keyword" && this.peek().value === "else") {
+        this.eat();
+        elseBody = this.parseBlock();
+      }
+      return { kind: "if", cond, then: thenBody, ...(elseBody ? { else: elseBody } : {}), line: kw.line };
+    }
+    if (t.kind === "keyword" && t.value === "for") {
+      const kw = this.eat();
+      this.expect("punct", "(");
+      const init = this.parseStmt();
+      const cond = this.parseExpr();
+      this.expect("punct", ";");
+      const update = this.parseSimpleStmtNoSemi();
+      this.expect("punct", ")");
+      const body = this.parseBlock();
+      return { kind: "for", init, cond, update, body, line: kw.line };
+    }
     if (t.kind === "keyword" && (t.value === "let" || t.value === "var")) {
       const kw = this.eat();
       const name = this.expect("ident").value;
@@ -283,18 +308,81 @@ class Parser {
     }
     // assignment or expression
     const expr = this.parseExpr();
-    if (this.match("punct", "=")) {
-      const value = this.parseExpr();
+    const p = this.peek();
+    if (
+      p.kind === "punct" &&
+      (p.value === "=" || p.value === "+=" || p.value === "-=" || p.value === "*=" || p.value === "/=")
+    ) {
+      const op = this.eat().value;
+      const rhs = this.parseExpr();
       this.expect("punct", ";");
-      return { kind: "assign", target: expr, value, line: t.line };
+      if (op === "=") {
+        return { kind: "assign", target: expr, value: rhs, line: t.line };
+      }
+      const binOp = op[0]!;
+      return {
+        kind: "assign",
+        target: expr,
+        value: { kind: "binop", op: binOp, left: expr, right: rhs, line: t.line },
+        line: t.line,
+      };
     }
     this.expect("punct", ";");
     return { kind: "expr", value: expr, line: t.line };
   }
 
+  private parseSimpleStmtNoSemi(): Stmt {
+    const t = this.peek();
+    const expr = this.parseExpr();
+    const p = this.peek();
+    if (
+      p.kind === "punct" &&
+      (p.value === "=" || p.value === "+=" || p.value === "-=" || p.value === "*=" || p.value === "/=")
+    ) {
+      const op = this.eat().value;
+      const rhs = this.parseExpr();
+      if (op === "=") {
+        return { kind: "assign", target: expr, value: rhs, line: t.line };
+      }
+      // desugar compound assignment to plain assignment with binop
+      const binOp = op[0]!; // + - * /
+      return {
+        kind: "assign",
+        target: expr,
+        value: { kind: "binop", op: binOp, left: expr, right: rhs, line: t.line },
+        line: t.line,
+      };
+    }
+    return { kind: "expr", value: expr, line: t.line };
+  }
+
   // expression parsing with precedence
   private parseExpr(): Expr {
-    return this.parseAdd();
+    return this.parseLogical();
+  }
+  private parseLogical(): Expr {
+    let left = this.parseCompare();
+    while (
+      this.peek().kind === "punct" &&
+      (this.peek().value === "&&" || this.peek().value === "||")
+    ) {
+      const op = this.eat().value;
+      const right = this.parseCompare();
+      left = { kind: "binop", op, left, right, line: left.line };
+    }
+    return left;
+  }
+  private parseCompare(): Expr {
+    let left = this.parseAdd();
+    while (
+      this.peek().kind === "punct" &&
+      ["<", ">", "<=", ">=", "==", "!="].includes(this.peek().value)
+    ) {
+      const op = this.eat().value;
+      const right = this.parseAdd();
+      left = { kind: "binop", op, left, right, line: left.line };
+    }
+    return left;
   }
   private parseAdd(): Expr {
     let left = this.parseMul();

@@ -101,11 +101,10 @@ interface Ctx {
   rewriteIdent(name: string): string;
 }
 
-function emitStmt(s: Stmt, ctx: Ctx): string {
+function emitStmt(s: Stmt, ctx: Ctx, indent = "  "): string {
   switch (s.kind) {
     case "let":
     case "var": {
-      // Output-struct construction like `var out: VSOut;` — skip, we use globals.
       if (
         s.type &&
         typeof s.type !== "string" &&
@@ -114,20 +113,17 @@ function emitStmt(s: Stmt, ctx: Ctx): string {
       ) {
         return ``;
       }
-      const kw = "";
       const t = s.type ? glslType(s.type) + " " : "";
-      return `  ${kw}${t || "float "}${s.name} = ${emitExpr(s.value, ctx)};`;
+      return `${indent}${t || "float "}${s.name} = ${emitExpr(s.value, ctx)};`;
     }
     case "return": {
       if (ctx.stage === "fragment") {
-        if (!s.value) return "  return;";
-        return `  fragColor = ${emitExpr(s.value, ctx)};`;
+        if (!s.value) return `${indent}return;`;
+        return `${indent}fragColor = ${emitExpr(s.value, ctx)};\n${indent}return;`;
       }
-      // vertex stage: return is implicit via gl_Position + varyings already written during out.* assigns
-      return "  return;";
+      return `${indent}return;`;
     }
     case "assign": {
-      // rewrite `out.foo = X` -> varying or gl_Position
       if (
         s.target.kind === "field" &&
         s.target.target.kind === "ident" &&
@@ -136,13 +132,28 @@ function emitStmt(s: Stmt, ctx: Ctx): string {
         const info = ctx.outputFields.get(s.target.name);
         if (info) {
           const lhs = info.isPosition ? "gl_Position" : info.glslName;
-          return `  ${lhs} = ${emitExpr(s.value, ctx)};`;
+          return `${indent}${lhs} = ${emitExpr(s.value, ctx)};`;
         }
       }
-      return `  ${emitExpr(s.target, ctx)} = ${emitExpr(s.value, ctx)};`;
+      return `${indent}${emitExpr(s.target, ctx)} = ${emitExpr(s.value, ctx)};`;
     }
     case "expr":
-      return `  ${emitExpr(s.value, ctx)};`;
+      return `${indent}${emitExpr(s.value, ctx)};`;
+    case "if": {
+      const thenBody = s.then.map((st) => emitStmt(st, ctx, indent + "  ")).filter(Boolean).join("\n");
+      let out = `${indent}if (${emitExpr(s.cond, ctx)}) {\n${thenBody}\n${indent}}`;
+      if (s.else) {
+        const elseBody = s.else.map((st) => emitStmt(st, ctx, indent + "  ")).filter(Boolean).join("\n");
+        out += ` else {\n${elseBody}\n${indent}}`;
+      }
+      return out;
+    }
+    case "for": {
+      const init = emitStmt(s.init, ctx, "").trim().replace(/;$/, "");
+      const update = emitStmt(s.update, ctx, "").trim().replace(/;$/, "");
+      const body = s.body.map((st) => emitStmt(st, ctx, indent + "  ")).filter(Boolean).join("\n");
+      return `${indent}for (${init}; ${emitExpr(s.cond, ctx)}; ${update}) {\n${body}\n${indent}}`;
+    }
   }
 }
 
@@ -343,6 +354,21 @@ function emitFnBody(fn: FnDecl, ctx: Ctx, mod: Module): string {
         };
       case "expr":
         return { ...s, value: rewriteExpr(s.value) };
+      case "if":
+        return {
+          ...s,
+          cond: rewriteExpr(s.cond),
+          then: s.then.map(rewriteStmt),
+          ...(s.else ? { else: s.else.map(rewriteStmt) } : {}),
+        };
+      case "for":
+        return {
+          ...s,
+          init: rewriteStmt(s.init),
+          cond: rewriteExpr(s.cond),
+          update: rewriteStmt(s.update),
+          body: s.body.map(rewriteStmt),
+        };
     }
   }
   const lines = fn.body

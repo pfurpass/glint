@@ -112,7 +112,7 @@ export function tokenize(source: string): Token[] {
 
     // multi-char punctuation
     const two = source.slice(i, i + 2);
-    if (["->", "==", "!=", "<=", ">=", "&&", "||", "::"].includes(two)) {
+    if (["->", "==", "!=", "<=", ">=", "&&", "||", "::", "+=", "-=", "*=", "/="].includes(two)) {
       push("punct", two, sl, sc);
       i += 2;
       col += 2;
